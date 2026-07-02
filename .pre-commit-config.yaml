@@ -1,0 +1,56 @@
+# Pre-commit hooks (req. 11)
+# Run locally: pre-commit run --all-files
+# CI equivalent: pre-commit run --from-ref origin/main --to-ref HEAD
+
+repos:
+  # ── General file hygiene ───────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml          # validate YAML syntax (catches bad indentation)
+      - id: check-json          # validate JSON (catches malformed .detect-secrets.json)
+      - id: end-of-file-fixer   # ensure files end with a newline
+      - id: trailing-whitespace # strip trailing spaces
+      - id: mixed-line-ending   # enforce LF on all files
+        args: [--fix=lf]
+
+  # ── Terraform formatting, validation, and linting ─────────────────────────
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.96.2
+    hooks:
+      - id: terraform_fmt       # auto-format all .tf files to canonical style
+      - id: terraform_validate  # run terraform validate in every module directory
+        args:
+          - --args=-no-color
+      - id: terraform_tflint    # lint rules beyond what validate catches
+        args:
+          - --args=--minimum-failure-severity=warning
+
+  # ── Security and compliance scanning ──────────────────────────────────────
+  - repo: https://github.com/bridgecrewio/checkov
+    rev: 3.2.230
+    hooks:
+      - id: checkov
+        name: checkov (Terraform)
+        args:
+          - --directory
+          - .
+          - --quiet
+          - --framework
+          - terraform
+        # Skip checks that are intentionally unmet in this teaching project:
+        # CKV_AWS_91  — ALB access logging is enabled but checkov flags the prefix
+        # CKV2_AWS_28 — WAF on ALB (Jenkins ALB has WAF; app ALB is intentionally open)
+        additional_dependencies: []
+
+  # ── Secret / credential detection ─────────────────────────────────────────
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args:
+          - --baseline
+          - .detect-secrets.json
+        # Transcrypt-encrypted files are excluded — their ciphertext would trigger
+        # high-entropy false positives (see .transcrypt/ directory)
+        exclude: \.transcrypt/

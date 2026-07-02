@@ -1,0 +1,28 @@
+FROM jenkins/jenkins:lts
+
+USER root
+
+# Install Docker CLI and AWS CLI
+RUN apt-get update && apt-get install -y \
+    curl \
+    unzip \
+    apt-transport-https \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+  && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
+  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" \
+     > /etc/apt/sources.list.d/docker.list \
+  && apt-get update && apt-get install -y docker-ce-cli \
+  && curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip" \
+  && unzip /tmp/awscliv2.zip -d /tmp \
+  && /tmp/aws/install \
+  && rm -rf /tmp/awscliv2.zip /tmp/aws \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Create docker group with the same GID as the host's docker socket (Amazon Linux 2 ECS = 993)
+# and add jenkins user to it so it can access /var/run/docker.sock mounted from the host
+ARG DOCKER_GID=993
+RUN groupadd -g ${DOCKER_GID} docker && usermod -aG docker jenkins
+
+USER jenkins

@@ -1,0 +1,23 @@
+# Terraform
+terraform.tfvars
+*.tfvars
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+tfplan
+
+# Secrets
+.detect-secrets.json
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Claude Code local settings
+.claude/
+
+# AWS SSM Session Manager installer
+session-manager-plugin.pkg
+sessionmanager-bundle.zip
+sessionmanager-bundle/
