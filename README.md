@@ -394,6 +394,40 @@ type: Secret text):
 
 ---
 
+## Troubleshooting
+
+Issues encountered during build-out, with root causes and resolutions.
+
+| Issue | Error / Symptom | Root Cause | Resolution | Reference |
+|---|---|---|---|---|
+| Docker permission denied | `permission denied while trying to connect to the Docker API at unix:///var/run/docker.sock` | Jenkins could not access the Docker daemon through `/var/run/docker.sock`. Later builds confirmed Docker access had been restored. | Verified Docker could successfully build images, confirming the Docker socket/access issue had been resolved. | [Docker post-installation: manage Docker as a non-root user](https://docs.docker.com/engine/install/linux-postinstall/) |
+| SNS publish authorization | `AuthorizationError: ... is not authorized to perform: sns:Publish` | The EC2 instance IAM role (`cloud-ecs-host`) only had `AmazonEC2ContainerServiceforEC2Role` and `AmazonSSMManagedInstanceCore`. It lacked `sns:Publish` permission. | Added a custom IAM policy granting `sns:Publish` on `aws_sns_topic.alerts.arn` and attached it to the `ecs_host` role. Email notifications then succeeded. | [IAM identity-based policies for Amazon SNS](https://docs.aws.amazon.com/sns/latest/dg/sns-using-identity-based-policies.html) |
+| Jenkins failure notification | Jenkins `post { failure }` failed with `script returned exit code 254` | The SNS publish command failed because of missing IAM permissions. | After granting `sns:Publish`, the failure notification completed successfully and emails were delivered. | [Jenkins Pipeline post section](https://www.jenkins.io/doc/book/pipeline/syntax/#post) |
+| Jenkins pipeline stopped after Build stage | `Stage "Push to ECR" skipped due to earlier failure(s)` even though `docker build` completed | The build stage exited with status `1` despite Docker successfully creating the image. Likely caused by the shell pipeline (`docker build ... \| tee build.log`) or another shell exit condition. | Updated the Jenkinsfile to avoid piping directly to `tee`; instead, redirected output to a log file, displayed it with `cat`, and uploaded it to S3. | [Jenkins Pipeline: sh step](https://www.jenkins.io/doc/pipeline/steps/workflow-durable-task-step/#sh-shell-script) |
+| SNS Terraform configuration | IAM policy referenced a non-existent SNS resource | The IAM policy used `aws_sns_topic.pipeline_notifications.arn`, but the actual SNS resource in `sns.tf` was `aws_sns_topic.alerts`. | Updated the IAM policy to reference `aws_sns_topic.alerts.arn`. | [Terraform AWS SNS Topic resource](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sns_topic) |
+| Git remote after repository replacement | Pushing to a newly created GitHub repository | The original repository had been deleted and replaced with a new one, requiring the local repository's remote to point to the new URL. | Updated the remote using `git remote set-url origin <new-repository-url>` instead of creating a second `origin`. | [GitHub: Managing remote repositories](https://docs.github.com/en/get-started/git-basics/managing-remote-repositories) |
+| Git push failure | `fatal: mmap failed: Operation timed out`, `the remote end hung up unexpectedly` | Git successfully contacted GitHub but the push failed during object transfer, pointing to a Git client, network, or repository transfer problem. | Ran `git gc` and `git repack`, verified the remote, and cloned to a temp directory to push from a clean object store. | [Git troubleshooting guide](https://git-scm.com/docs/gitfaq) |
+
+---
+
+## Pipeline Output
+
+The pipeline has been run successfully multiple times. Earlier build records were cleared when the Jenkins and application Docker images were rebuilt from scratch during development — rebuilding the ECS task definition creates a fresh Jenkins instance, which resets the build history. The screenshots below are from the most recent successful run.
+
+### Jenkins — Successful Pipeline Run
+
+Build #1 shown here completed in 2 minutes 26 seconds with no failures. The pipeline executed all four stages: Checkout, Build image, Push to ECR, Deploy to ECS, and the Health check, then published a success notification via SNS.
+
+![Jenkins pipeline success](docs/jenkins-pipeline-success.png)
+
+### Application UI
+
+The deployed container serves the application at `app.peemijoe.xyz`, confirming the ECS service is healthy and the ALB is routing traffic correctly.
+
+![Application UI](docs/app-ui.png)
+
+---
+
 ## Repository Structure
 
 ```
