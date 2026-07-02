@@ -410,6 +410,28 @@ Issues encountered during build-out, with root causes and resolutions.
 
 ---
 
+## Decision Making
+
+Key architectural and implementation decisions made during the build, with the reasoning behind each choice.
+
+| Decision | Options Considered | Choice Made | Reasoning |
+|---|---|---|---|
+| Compute platform | ECS on EC2 vs Fargate | ECS on EC2 (t3.micro) | Fargate has no free tier — per-vCPU/per-GB charges start immediately. t3.micro fits the 750-hour free-tier allowance with two instances per cluster. |
+| VPC layout | One VPC with separate subnets vs two VPCs | Two VPCs (10.40/16 and 10.41/16) | Separate VPCs enforce a blast-radius boundary — a misconfiguration in the Jenkins VPC cannot affect the app's routing tables, NACLs, or security groups. |
+| Module structure | One module per VPC vs one reusable module | Single `ecs_service` module called twice | Eliminates ~150 lines of duplicated HCL. Differences (image, port, task size, docker socket) are all variables — no conditional logic needed. |
+| ECR mutability | IMMUTABLE tags vs MUTABLE tags | MUTABLE | The ECS task definition pins to `:latest`. IMMUTABLE tags block overwriting that tag on every push, which breaks the deploy stage. |
+| IAM for pipeline | Attach permissions to task execution role vs host role | Separate policy on `ecs_host` role | Jenkins runs in bridge-mode — the container inherits the EC2 host instance profile, not the ECS task execution role. |
+| S3 logging | Multiple buckets vs single bucket with prefixes | Single bucket (`alb/`, `ecs/`, `pipeline/`) | Simpler to manage, cheaper, and encryption/public-access-block apply uniformly. |
+| Jenkins geo-restriction | IP allowlist in security group vs WAF geo-match | WAFv2 Regional Web ACL | Security groups cannot filter by country. WAF geo-match on `["PT"]` is easier to maintain than keeping Portugal ISP CIDR ranges up to date. |
+| TLS termination | Self-signed certs vs ACM-managed | ACM-managed on both ALBs | No certificate lifecycle management. ALB + ACM handles renewal automatically. |
+| Terraform backend | Local state vs S3 + DynamoDB | Local state (S3 backend commented out) | Single operator during development — no concurrent apply risk. The S3 backend block is in `versions.tf`, ready to enable when team size grows. |
+| CloudWatch retention | No expiry vs fixed retention | 7-day retention | Long enough to debug a failed deployment, short enough to avoid meaningful storage cost on the free tier. |
+
+**Full AI-assisted session log (architecture, debugging, and implementation decisions):**
+[https://claude.ai/share/83635cd9-de03-44c9-8b93-60459eef72ee](https://claude.ai/share/83635cd9-de03-44c9-8b93-60459eef72ee)
+
+---
+
 ## Pipeline Output
 
 The pipeline has been run successfully multiple times. Earlier build records were cleared when the Jenkins and application Docker images were rebuilt from scratch during development — rebuilding the ECS task definition creates a fresh Jenkins instance, which resets the build history. The screenshots below are from the most recent successful run.
