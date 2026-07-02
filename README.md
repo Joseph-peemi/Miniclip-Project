@@ -1,5 +1,9 @@
 # Broken Cloud Pipeline
 
+[![Terraform](https://img.shields.io/badge/Terraform-1.x-623CE4.svg)](https://www.terraform.io/)
+[![AWS](https://img.shields.io/badge/AWS-ECS%20%2F%20VPC-orange.svg)](https://aws.amazon.com/)
+[![Jenkins](https://img.shields.io/badge/Jenkins-CI%2FCD-D24939.svg)](https://www.jenkins.io/)
+
 A deliberately flawed cloud deployment pipeline on AWS (eu-central-1) built with
 Terraform, Jenkins, and Bash. The infrastructure is fully functional end-to-end; exactly three subtle, documented flaws are embedded to be identified and fixed during peer review.
 
