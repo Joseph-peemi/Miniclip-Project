@@ -1,4 +1,4 @@
-// Root input variables (req. 7: object-typed tags; req. 13.x: sizing/count controls)
+// Top-level inputs for the whole stack — tagging, alerting, and the shared cert
 
 variable "tags" {
   type = object({
@@ -15,8 +15,8 @@ variable "alert_email" {
   description = "Email address for SNS alert notifications"
 }
 
-// Both ALB HTTPS listeners share one cert — the cert must cover the app and Jenkins domains.
-// Request a free public cert in ACM and verify domain ownership before running terraform apply.
+// Both ALBs share this one cert, so it needs to cover both the app and Jenkins
+// domains. Request it in ACM and get domain ownership verified before you apply.
 variable "acm_certificate_arn" {
   type        = string
   description = "ACM certificate ARN for HTTPS listeners on both ALBs (must be in eu-central-1)"

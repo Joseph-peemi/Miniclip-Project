@@ -1,6 +1,6 @@
-// IAM roles consumed by ECS (req. 5):
-//   ecs_task_execution — ECS agent pulls images from ECR and writes CloudWatch logs
-//   ecs_host           — EC2 container hosts register with the cluster and pull tasks
+// Two roles ECS actually uses:
+//   ecs_task_execution — lets the ECS agent pull images from ECR and ship logs to CloudWatch
+//   ecs_host           — lets the EC2 hosts register with the cluster and pull down tasks
 
 # ── ECS task execution role ───────────────────────────────────────────────────
 
@@ -21,13 +21,14 @@ resource "aws_iam_role" "ecs_task_execution" {
   tags               = var.tags
 }
 
-// Grants ECR pull, CloudWatch Logs write, and SSM parameter read (standard set)
+// The standard AWS-managed policy: ECR pull, CloudWatch Logs write, SSM param read
 resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   role       = aws_iam_role.ecs_task_execution.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-// Additional S3 write permission for ECS container logs and pipeline logs (req. 6)
+// The managed policy above doesn't cover S3, so this bolts on write access
+// for container logs and pipeline logs specifically
 data "aws_iam_policy_document" "ecs_s3_logs" {
   statement {
     sid = "WriteECSAndPipelineLogs"
@@ -72,19 +73,19 @@ resource "aws_iam_role" "ecs_host" {
   tags               = var.tags
 }
 
-// Allows the ECS agent on the EC2 host to register, drain, and manage tasks
+// Lets the ECS agent on each host register, drain, and manage its own tasks
 resource "aws_iam_role_policy_attachment" "ecs_host" {
   role       = aws_iam_role.ecs_host.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
 }
 
-// Allows the EC2 host to be managed through AWS Systems Manager
+// So we can reach these hosts through SSM Session Manager instead of SSH keys
 resource "aws_iam_role_policy_attachment" "ecs_host_ssm" {
   role       = aws_iam_role.ecs_host.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
-// Allows the EC2 host (Jenkins) to publish build notifications to SNS
+// Gives the Jenkins host a way to publish its own build notifications to SNS
 data "aws_iam_policy_document" "ecs_host_sns" {
   statement {
     sid = "PublishPipelineNotifications"
@@ -109,7 +110,8 @@ resource "aws_iam_role_policy_attachment" "ecs_host_sns" {
   policy_arn = aws_iam_policy.ecs_host_sns.arn
 }
 
-// Allows Jenkins container (running via EC2 host role) to push images and trigger ECS deploys
+// The Jenkins container runs bridge-mode and inherits this host role, so this
+// is what actually lets the pipeline push images to ECR and kick off ECS deploys
 data "aws_iam_policy_document" "ecs_host_pipeline" {
   statement {
     sid = "ECRAuth"

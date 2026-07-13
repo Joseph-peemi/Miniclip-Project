@@ -1,36 +1,36 @@
-// Name prefix for this service's resources — "app" or "jenkins" (req. 3)
+// Whatever calls this module names its own service — "app" or "jenkins"
 variable "name" {
   type        = string
   description = "Name prefix for the ECS cluster/service/task"
 }
 
-// Private subnets only — the cluster's EC2 hosts never sit in a public subnet (req. 13.2)
+// Always private — the EC2 hosts backing this cluster never sit in a public subnet
 variable "private_subnet_ids" {
   type        = list(string)
   description = "Private subnet IDs for the ECS cluster's EC2 hosts"
 }
 
-// Container image — infrastructureascode/hello-world for app, jenkins/jenkins:lts for Jenkins
+// infrastructureascode/hello-world for the app, jenkins/jenkins:lts for Jenkins
 variable "container_image" {
   type        = string
   description = "Docker image for the ECS task"
 }
 
-// Port the container listens on
+// What port the container actually listens on
 variable "container_port" {
   type        = number
   default     = 80
   description = "Container port registered with the ALB target group"
 }
 
-// 2 containers for the app, 1 for Jenkins (req. 13.3)
+// 2 for the app, 1 for Jenkins — set by whoever calls the module
 variable "desired_count" {
   type        = number
   default     = 1
   description = "Desired number of running tasks"
 }
 
-// Task-level compute sizing, object type with defaults per org standard (req. 7)
+// CPU/memory for the task definition — the defaults are sane, callers override as needed
 variable "task_size" {
   type = object({
     cpu    = optional(number, 256)
@@ -40,33 +40,33 @@ variable "task_size" {
   description = "CPU units / memory (MiB) for the task definition (req. 13.3: e.g. 256/512)"
 }
 
-// Free-tier EC2 only (Technical Scope: t3.micro)
+// Sticking to t3.micro so this stays inside the free tier
 variable "instance_type" {
   type        = string
   default     = "t3.micro"
   description = "EC2 instance type backing the ECS cluster"
 }
 
-// 2 EC2 instances per cluster (Technical Scope)
+// 2 hosts per cluster keeps us within the free-tier hour budget
 variable "instance_count" {
   type        = number
   default     = 2
   description = "Number of EC2 instances in the ECS cluster"
 }
 
-// ALB target group this service registers with
+// Which ALB target group this service should register itself with
 variable "target_group_arn" {
   type        = string
   description = "ARN of the ALB target group to attach the service to"
 }
 
-// Security groups applied to the ECS EC2 hosts
+// Applied to the EC2 hosts, not the containers
 variable "security_group_ids" {
   type        = list(string)
   description = "Security group IDs for the ECS EC2 instances"
 }
 
-// IAM is created in root iam.tf and passed in — keeps this module free of IAM opinions
+// Created back in root iam.tf and passed in here — keeps IAM decisions out of this module
 variable "task_execution_role_arn" {
   type        = string
   description = "IAM role ARN the ECS agent uses to pull images and write logs"

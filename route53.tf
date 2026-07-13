@@ -1,7 +1,6 @@
-// Route 53 health checks for both ALBs (req. 11)
-// These are passive HTTPS probes — they do not create DNS records.
-// Attach them to Route 53 DNS records (e.g. weighted/failover policies) to
-// automate traffic cutover when an ALB goes unhealthy.
+// Passive HTTPS health checks against both ALBs. These don't create any DNS
+// records on their own — wire them into a weighted or failover routing policy
+// if you want Route 53 to actually cut traffic away from an unhealthy ALB.
 
 resource "aws_route53_health_check" "app" {
   fqdn              = aws_lb.app.dns_name

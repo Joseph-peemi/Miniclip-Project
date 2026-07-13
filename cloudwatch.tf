@@ -1,5 +1,6 @@
-// CloudWatch log groups, a HTTP 5xx alarm, and a daily cost alarm (req. 9)
-// Log group names must match the awslogs-group values in ecs-service/main.tf.
+// Log groups for both clusters, an alarm for 5xx errors, and a daily cost
+// tripwire. Keep the log group names in sync with the awslogs-group values
+// set in modules/ecs_service/main.tf, or logging silently breaks.
 
 resource "aws_cloudwatch_log_group" "ecs_app" {
   name              = "/ecs/${local.name_prefix}-app"
@@ -13,7 +14,8 @@ resource "aws_cloudwatch_log_group" "ecs_jenkins" {
   tags              = var.tags
 }
 
-// Fires on any HTTP 5xx response from the app ALB targets (req. 9: "errors > 0")
+// Any 5xx from an app ALB target trips this — threshold is intentionally 0,
+// we want to know the moment something breaks, not after a batch of them
 resource "aws_cloudwatch_metric_alarm" "app_5xx" {
   alarm_name          = "${local.name_prefix}-app-5xx"
   comparison_operator = "GreaterThanThreshold"
@@ -35,7 +37,8 @@ resource "aws_cloudwatch_metric_alarm" "app_5xx" {
   tags          = var.tags
 }
 
-// AWS billing metrics are only published to us-east-1 — provider alias from providers.tf
+// Billing metrics only ever show up in us-east-1, no matter where the rest of
+// the stack lives, so this alarm has to use the aliased provider from providers.tf
 resource "aws_cloudwatch_metric_alarm" "cost" {
   provider = aws.us_east_1
 

@@ -1,10 +1,10 @@
-// ECR repositories for the app image (custom Dockerfile in docker/) and the
-// Jenkins image. Both have scan-on-push enabled and lifecycle policies to
-// cap stored image count and limit storage cost (req. 13.5).
+// Two repos: one for our own app image (built from Docker/Dockerfile) and one
+// for the Jenkins image. Both scan on push and get a lifecycle policy so old
+// images actually get cleaned up instead of piling up storage cost forever.
 
 resource "aws_ecr_repository" "app" {
   name                 = "${local.name_prefix}-app"
-  image_tag_mutability = "MUTABLE" // allows pipeline to overwrite :latest on every build
+  image_tag_mutability = "MUTABLE" // the pipeline pushes over :latest every build, so this can't be immutable
 
   image_scanning_configuration {
     scan_on_push = true
@@ -19,7 +19,7 @@ resource "aws_ecr_repository" "app" {
 
 resource "aws_ecr_repository" "jenkins" {
   name                 = "${local.name_prefix}-jenkins"
-  image_tag_mutability = "MUTABLE" // lts tag is updated in place by upstream
+  image_tag_mutability = "MUTABLE" // upstream moves the lts tag around, so ours has to allow that too
 
   image_scanning_configuration {
     scan_on_push = true

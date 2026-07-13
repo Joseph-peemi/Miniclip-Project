@@ -1,5 +1,5 @@
-// Both Application Load Balancers, their target groups, and HTTPS listeners (req. 4)
-// Access logs land in the shared S3 bucket (s3.tf) under alb/app and alb/jenkins prefixes.
+// Both ALBs live here — target groups, HTTPS listeners, all of it. Access logs
+// go into the shared bucket from s3.tf, split under the alb/app and alb/jenkins prefixes.
 
 # ── App ALB ──────────────────────────────────────────────────────────────────
 

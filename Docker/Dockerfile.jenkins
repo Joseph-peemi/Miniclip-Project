@@ -2,7 +2,7 @@ FROM jenkins/jenkins:lts
 
 USER root
 
-# Install Docker CLI and AWS CLI
+# Jenkins needs to shell out to both the Docker CLI and the AWS CLI during the pipeline
 RUN apt-get update && apt-get install -y \
     curl \
     unzip \

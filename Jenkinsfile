@@ -1,23 +1,24 @@
-// Jenkinsfile — runs as a Docker-based Jenkins controller
+// This runs on a Docker-based Jenkins controller.
 //
-// FLAW: Excessive S3 logging — each stage redirects its command output to a .log file
-// (build.log, push.log, deploy.log) and uploads it to S3 via aws s3 cp on every build,
-// in addition to Jenkins' own console log. Three extra PutObject calls per run with no
-// lifecycle expiry on the pipeline/ prefix means objects accumulate indefinitely,
-// inflating S3 storage and request costs. Fix: remove the aws s3 cp lines, or add an
-// S3 lifecycle rule expiring pipeline/ objects after 30 days.
+// FLAW 2: every stage dumps its output to a .log file (build.log, push.log,
+// deploy.log) and then uploads that file to S3 on top of what Jenkins already
+// keeps in its own console log. That's three extra PutObject calls per build,
+// and since nothing expires objects under the pipeline/ prefix, they just pile
+// up forever, quietly driving up S3 storage and request costs. Fix is either
+// to drop the aws s3 cp lines, or add a lifecycle rule that expires pipeline/
+// objects after 30 days.
 pipeline {
     agent any
 
     environment {
         AWS_REGION    = 'eu-central-1'
 
-        // Jenkins credentials
+        // pulled from Jenkins credentials store
         ECR_REGISTRY  = credentials('ecr-registry-url')
         SNS_TOPIC_ARN = credentials('sns-topic-arn')
         LOG_BUCKET    = credentials('log-bucket-name')
 
-        // Application settings
+        // just app-level naming, nothing sensitive
         ECR_REPO      = 'cloud-app'
         ECS_CLUSTER   = 'cloud-app-cluster'
         ECS_SERVICE   = 'cloud-app-svc'
