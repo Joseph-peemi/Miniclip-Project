@@ -1,19 +1,20 @@
-// Central place for computed / derived values.
-// Changing these is the only thing needed to re-CIDR or rename the whole stack.
+// Everything derived/computed lives here. If we ever need to re-CIDR the
+// network or rename the whole stack, this is the only file that should change.
 
 locals {
-  // Short prefix used in all resource names — keeps naming consistent with s3.tf
+  // Feeds into every resource name — keep it in sync with the bucket name in s3.tf
   name_prefix = var.tags.product
 
-  // eu-central-1 has three AZs; we use two to keep the free-tier instance count at 2 per cluster
+  // Only using 2 of eu-central-1's 3 AZs, since we're capping each cluster at
+  // 2 instances anyway to stay inside the free tier
   azs = ["eu-central-1a", "eu-central-1b"]
 
-  // App VPC — 10.40.0.0/16, subnets carved into /24 blocks
+  // App VPC — /24 subnets carved out of 10.40.0.0/16
   app_vpc_cidr        = "10.40.0.0/16"
   app_public_subnets  = ["10.40.0.0/24", "10.40.1.0/24"]
   app_private_subnets = ["10.40.10.0/24", "10.40.11.0/24"]
 
-  // Jenkins VPC — 10.41.0.0/16, mirrors the app VPC layout
+  // Jenkins VPC — same layout, just shifted into 10.41.0.0/16
   jenkins_vpc_cidr        = "10.41.0.0/16"
   jenkins_public_subnets  = ["10.41.0.0/24", "10.41.1.0/24"]
   jenkins_private_subnets = ["10.41.10.0/24", "10.41.11.0/24"]

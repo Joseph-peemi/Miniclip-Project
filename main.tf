@@ -1,31 +1,32 @@
-// Root module — wires the two VPC modules and two ECS-service modules together.
-// All cross-cutting resources (ALBs, ECR, IAM, etc.) live in the root files.
+// This is where the two VPC modules and two ECS-service modules actually get
+// wired together. Everything that cuts across both stacks — ALBs, ECR, IAM —
+// lives in the root files rather than being duplicated per-service.
 //
-// Design Decision Justification (cost, speed, complexity):
+// A few notes on why things are shaped this way:
 //
-// Cost — all EC2 instances are t3.micro, staying within the AWS free-tier 750-hour
-// monthly allowance; min/max of each ASG is fixed at 2 so no auto-scaling event can
-// spin up billable capacity. One shared S3 bucket (path-prefixed) is cheaper than
-// three separate buckets. CloudWatch log groups retain for 7 days only, capping
-// ingestion cost. ECR lifecycle policies bound image storage to 10 (app) and 5
-// (Jenkins) images. ALBs are the minimum required for WAF integration; NLBs would
-// be slightly cheaper but cannot attach a WAF Web ACL.
+// Cost: every EC2 instance is t3.micro, and each ASG is pinned min=max=2 so
+// nothing can scale up into billable territory on its own. The three log
+// streams share one S3 bucket instead of three, log groups only keep 7 days,
+// and ECR lifecycle rules cap image storage at 10 (app) / 5 (Jenkins). ALBs
+// were picked over NLBs mainly because NLBs can't attach a WAF Web ACL —
+// otherwise NLBs would've been the cheaper option.
 //
-// Speed — a single reusable ECS module (modules/ecs_service/) deploys both the
-// application and Jenkins identically, eliminating ~150 lines of duplicated HCL and
-// making both clusters updatable from one file. Terraform file splitting by resource
-// type means any resource (security group, alarm, bucket) is findable in one file
-// without cross-file searching. The ECS-optimised AMI is resolved at plan time via
-// SSM parameter, so AMI updates require no code change.
+// Speed of iteration: modules/ecs_service/ is used twice — once for the app,
+// once for Jenkins — instead of writing out the ECS resources twice. That
+// alone cuts something like 150 lines of duplicated HCL and means both
+// clusters get updated from a single file. Resources are also split across
+// files by type (security groups, alarms, buckets, ...) so you're not hunting
+// across the whole repo for one thing. The AMI is resolved via SSM parameter
+// at plan time, so a new ECS-optimized AMI never requires a code change here.
 //
-// Complexity — two VPCs with VPC peering adds networking overhead but enforces a
-// hard blast-radius boundary: a Jenkins misconfiguration cannot reach the
-// application's routing tables or NACLs. WAF geo-restriction is chosen over security
-// group CIDR lists because Portugal's IP ranges shift as ISPs reallocate blocks;
-// a WAF country-code rule requires zero ongoing maintenance. The billing alarm uses
-// a provider alias (aws.us_east_1) rather than a separate stack because
-// EstimatedCharges is only published in us-east-1 — one alias is the lowest-
-// complexity solution that avoids a second Terraform workspace.
+// Why the extra complexity of two peered VPCs: it buys a hard blast-radius
+// boundary — a Jenkins misconfiguration physically can't reach the app VPC's
+// routes or NACLs. Portugal geo-restriction goes through WAF rather than
+// security-group CIDR lists because Portuguese IP ranges shift over time as
+// ISPs reallocate blocks; a WAF country-code rule just doesn't need upkeep.
+// And the billing alarm reuses a provider alias (aws.us_east_1) instead of a
+// second Terraform workspace, since EstimatedCharges is only ever published
+// in us-east-1 — the alias is the smallest change that gets us there.
 
 module "vpc_app" {
   source = "./modules/vpc"
@@ -49,13 +50,13 @@ module "vpc_jenkins" {
   tags            = var.tags
 }
 
-// FLAW: ECS task CPU over-allocated — requests 1024 CPU units for an
-// infrastructureascode/hello-world container that needs at most 256. This reserves
-// 4× the CPU on each t3.micro host (2048 units total), limiting the host to a single
-// schedulable task and wasting half the available compute. Core functionality is
-// unaffected because the task still starts, registers with the ALB, and serves
-// traffic normally; the only observable effect is that desired_count = 2 runs one
-// task per host instead of potentially two.
+// FLAW 1: this task asks for 1024 CPU units, but the hello-world container
+// running here barely needs 256. Each t3.micro host only has 2048 units total,
+// so this one task eats a full quarter of the host and leaves no room to
+// schedule a second one — half the cluster's compute just sits unused.
+// Nothing actually breaks: the task starts fine, registers with the ALB, and
+// serves traffic normally. The only symptom is that desired_count = 2 ends up
+// placing one task per host instead of doubling up where it could.
 module "ecs_app" {
   source = "./modules/ecs_service"
 

@@ -1,6 +1,6 @@
-// SNS topic that receives alarm notifications and forwards them by email (req. 9)
-// The subscription creates a pending confirmation — the email address in var.alert_email
-// must click the AWS confirmation link before any alarm emails are delivered.
+// Alarms land here and get forwarded to email. Heads up: the subscription
+// starts in "pending confirmation" — whoever owns var.alert_email has to
+// click the link AWS sends before any alerts actually arrive.
 
 resource "aws_sns_topic" "alerts" {
   name = "${local.name_prefix}-alerts"

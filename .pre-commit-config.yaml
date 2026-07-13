@@ -1,6 +1,5 @@
-# Pre-commit hooks (req. 11)
-# Run locally: pre-commit run --all-files
-# CI equivalent: pre-commit run --from-ref origin/main --to-ref HEAD
+# To run these locally: pre-commit run --all-files
+# CI runs the same hooks, just scoped to the diff: pre-commit run --from-ref origin/main --to-ref HEAD
 
 repos:
   # ── General file hygiene ───────────────────────────────────────────────────
@@ -38,9 +37,9 @@ repos:
           - --quiet
           - --framework
           - terraform
-        # Skip checks that are intentionally unmet in this teaching project:
-        # CKV_AWS_91  — ALB access logging is enabled but checkov flags the prefix
-        # CKV2_AWS_28 — WAF on ALB (Jenkins ALB has WAF; app ALB is intentionally open)
+        # A couple of checkov findings are expected here and left as-is on purpose:
+        # CKV_AWS_91  — access logging is on, checkov just doesn't like our prefix scheme
+        # CKV2_AWS_28 — Jenkins ALB has WAF attached; the app ALB deliberately doesn't
         additional_dependencies: []
 
   # ── Secret / credential detection ─────────────────────────────────────────
@@ -51,6 +50,6 @@ repos:
         args:
           - --baseline
           - .detect-secrets.json
-        # Transcrypt-encrypted files are excluded — their ciphertext would trigger
-        # high-entropy false positives (see .transcrypt/ directory)
+        # Skipping .transcrypt/ — encrypted ciphertext looks exactly like a leaked
+        # secret to a high-entropy scanner, so it'd just flag false positives all day
         exclude: \.transcrypt/

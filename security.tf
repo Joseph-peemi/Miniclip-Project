@@ -1,9 +1,8 @@
-// Security groups and WAF rules (req. 10)
-// Layout:
-//   alb_app      — HTTPS open to the internet (all app traffic)
-//   alb_jenkins  — HTTPS open, WAF enforces PT geo-restriction below
-//   ecs_app      — dynamic ports reachable only from alb_app
-//   ecs_jenkins  — dynamic ports from alb_jenkins + Jenkins agent port from app VPC
+// Security groups plus the WAF rule that restricts Jenkins by country. Rough layout:
+//   alb_app      — HTTPS wide open to the internet, this is public app traffic
+//   alb_jenkins  — HTTPS open at the SG level, but WAF below blocks anything not from PT
+//   ecs_app      — only reachable from alb_app, on the dynamic port range
+//   ecs_jenkins  — reachable from alb_jenkins, plus the Jenkins agent port from the app VPC
 
 # ── App ALB ──────────────────────────────────────────────────────────────────
 
@@ -31,9 +30,9 @@ resource "aws_security_group" "alb_app" {
 }
 
 # ── Jenkins ALB ───────────────────────────────────────────────────────────────
-# Security groups cannot filter by geography — port 443 is open here so health
-# checks and Route 53 can reach the ALB. The WAF Web ACL below blocks all
-# non-Portuguese traffic at the L7 edge before requests hit the listener.
+# Security groups have no concept of "country," so 443 has to stay open here
+# just so health checks and Route 53 can reach the ALB at all. The actual
+# geo-blocking happens one layer up, in the WAF Web ACL below.
 
 resource "aws_security_group" "alb_jenkins" {
   name        = "${local.name_prefix}-alb-jenkins"
@@ -65,7 +64,8 @@ resource "aws_security_group" "ecs_app" {
   description = "Allow inbound from the app ALB only (dynamic port range)"
   vpc_id      = module.vpc_app.vpc_id
 
-  // ALB uses the dynamic/ephemeral port range when task port mappings use hostPort = 0
+  // hostPort = 0 in the task definition means Docker picks a random host port,
+  // so the SG has to allow the whole ephemeral range, not one fixed port
   ingress {
     description     = "Dynamic ports from app ALB"
     from_port       = 32768
@@ -99,7 +99,7 @@ resource "aws_security_group" "ecs_jenkins" {
     security_groups = [aws_security_group.alb_jenkins.id]
   }
 
-  // Jenkins agent JNLP port — ECS tasks in the app VPC connect back via peering
+  // Port 50000 is the Jenkins agent JNLP port — app-side ECS tasks reach it over the peering link
   ingress {
     description = "Jenkins agent connections from app VPC"
     from_port   = 50000
@@ -165,17 +165,18 @@ resource "aws_wafv2_web_acl_association" "jenkins" {
 }
 
 # ── Network ACLs ──────────────────────────────────────────────────────────────
-# Enforce HTTPS-only inbound at the subnet boundary (req. 4).
-# NACLs are stateless — ephemeral/return-traffic ports (1024-65535) must be
-# explicitly permitted inbound so established TCP sessions can complete.
-# Private subnet NACLs allow only VPC-internal and peered-VPC CIDR traffic.
+# Locks inbound traffic down to HTTPS-only at the subnet boundary. Worth
+# remembering NACLs are stateless — unlike security groups, they don't track
+# connection state, so return traffic on ephemeral ports (1024-65535) needs its
+# own explicit allow rule or established connections just never complete.
+# Private subnets only trust traffic from inside the VPC or the peered one.
 
 # App VPC — public subnets (ALB layer)
 resource "aws_network_acl" "app_public" {
   vpc_id     = module.vpc_app.vpc_id
   subnet_ids = module.vpc_app.public_subnet_ids
 
-  // Inbound: HTTPS from the internet
+  // HTTPS in from anywhere — this is the public-facing side
   ingress {
     rule_no    = 100
     protocol   = "tcp"
@@ -185,7 +186,7 @@ resource "aws_network_acl" "app_public" {
     to_port    = 443
   }
 
-  // Inbound: ephemeral ports — return traffic for ALB-initiated connections to ECS targets
+  // Needed so return traffic from the ALB's own connections to ECS targets can get back in
   ingress {
     rule_no    = 200
     protocol   = "tcp"
@@ -195,7 +196,7 @@ resource "aws_network_acl" "app_public" {
     to_port    = 65535
   }
 
-  // Outbound: allow all (ALB → ECS targets, health checks, NAT)
+  // Wide open outbound — ALB talks to ECS targets, runs health checks, goes through NAT
   egress {
     rule_no    = 100
     protocol   = "-1"
@@ -213,7 +214,7 @@ resource "aws_network_acl" "app_private" {
   vpc_id     = module.vpc_app.vpc_id
   subnet_ids = module.vpc_app.private_subnet_ids
 
-  // Inbound: all TCP from the app VPC itself (ALB health checks, dynamic port range)
+  // All TCP from within the app VPC itself — covers ALB health checks and the dynamic port range
   ingress {
     rule_no    = 100
     protocol   = "tcp"
@@ -223,7 +224,7 @@ resource "aws_network_acl" "app_private" {
     to_port    = 65535
   }
 
-  // Inbound: traffic from Jenkins VPC via peering (pipeline deploy calls)
+  // Lets pipeline deploy calls in from the Jenkins VPC over the peering connection
   ingress {
     rule_no    = 200
     protocol   = "tcp"
@@ -233,7 +234,7 @@ resource "aws_network_acl" "app_private" {
     to_port    = 65535
   }
 
-  // Inbound: return traffic from internet (ECR pulls, CW logs via NAT)
+  // Return traffic from the internet via NAT — this is what ECR pulls and CW log shipping need
   ingress {
     rule_no    = 300
     protocol   = "tcp"
@@ -243,7 +244,7 @@ resource "aws_network_acl" "app_private" {
     to_port    = 65535
   }
 
-  // Outbound: allow all (ECR image pulls, CloudWatch logs, NAT gateway)
+  // Outbound wide open — ECR pulls, CloudWatch logs, NAT gateway traffic
   egress {
     rule_no    = 100
     protocol   = "-1"
@@ -305,7 +306,7 @@ resource "aws_network_acl" "jenkins_private" {
     to_port    = 65535
   }
 
-  // Inbound: app VPC via peering — Jenkins agent JNLP connections originate here
+  // App VPC over peering — this is where Jenkins agent JNLP connections come from
   ingress {
     rule_no    = 200
     protocol   = "tcp"

@@ -1,8 +1,8 @@
-// The default AWS provider (eu-central-1) and the terraform block are both defined
-// in versions.tf — kept together so version pins and provider config are in one file.
+// The main aws provider (eu-central-1) actually lives in versions.tf, right next
+// to the version pins — felt cleaner to keep those two together.
 //
-// A second provider alias is declared here for the billing CloudWatch namespace,
-// which AWS only publishes to us-east-1 regardless of where resources live.
+// This file just adds the second alias we need for billing metrics, since AWS
+// only ever publishes those to us-east-1, no matter where our stack runs.
 
 provider "aws" {
   alias  = "us_east_1"

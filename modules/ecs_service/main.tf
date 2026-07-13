@@ -1,19 +1,19 @@
-// Reusable ECS-on-EC2 module (req. 3) — root main.tf calls this once for the
-// application (infrastructureascode/hello-world, 2 tasks) and once for Jenkins
-// (jenkins/jenkins:lts, 1 task), each pointed at its own VPC's private subnets.
+// Generic ECS-on-EC2 setup, called twice from root main.tf: once for the app
+// (infrastructureascode/hello-world, 2 tasks) and once for Jenkins
+// (jenkins/jenkins:lts, 1 task) — each landing in its own VPC's private subnets.
 
-// Resolves the latest ECS-optimized AMI instead of hardcoding one
+// Grabs whatever the current ECS-optimized AMI is instead of pinning an ID that'll go stale
 data "aws_ssm_parameter" "ecs_ami" {
   name = "/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id"
 }
 
-// ECS cluster for this service (app cluster or Jenkins cluster)
+// One cluster per call — this becomes either the app cluster or the Jenkins cluster
 resource "aws_ecs_cluster" "this" {
   name = "${var.name}-cluster"
   tags = var.tags
 }
 
-// Launch template for the 2 free-tier EC2 hosts backing this cluster
+// Template for the free-tier EC2 hosts that back this cluster
 resource "aws_launch_template" "this" {
   name_prefix   = "${var.name}-lt-"
   image_id      = data.aws_ssm_parameter.ecs_ami.value
@@ -25,7 +25,7 @@ resource "aws_launch_template" "this" {
 
   vpc_security_group_ids = var.security_group_ids
 
-  // Registers the instance with the correct ECS cluster on boot
+  // Tells the instance which ECS cluster to join as soon as it boots
   user_data = base64encode(<<-EOF
     #!/bin/bash
     echo ECS_CLUSTER=${aws_ecs_cluster.this.name} >> /etc/ecs/ecs.config
@@ -38,7 +38,7 @@ resource "aws_launch_template" "this" {
   }
 }
 
-// Auto Scaling group — fixed at instance_count (2) free-tier instances per cluster
+// Pinned at instance_count on both ends (default 2) — no scaling surprises
 resource "aws_autoscaling_group" "this" {
   name                = "${var.name}-asg"
   vpc_zone_identifier = var.private_subnet_ids
@@ -58,7 +58,7 @@ resource "aws_autoscaling_group" "this" {
   }
 }
 
-// Ties the ASG to the ECS cluster so tasks can actually be placed on it
+// Without this, the ASG and the cluster don't know about each other and no task ever gets placed
 resource "aws_ecs_capacity_provider" "this" {
   name = "${var.name}-cp"
 
@@ -82,8 +82,8 @@ resource "aws_ecs_cluster_capacity_providers" "this" {
   }
 }
 
-// Task definition sized via var.task_size. See root main.tf for the FLAW comment
-// explaining why the app task is deliberately over-allocated at 1024 CPU / 512 MiB.
+// CPU/memory come from var.task_size — root main.tf has the full story on why
+// the app task ends up over-allocated at 1024 CPU / 512 MiB (FLAW 1).
 resource "aws_ecs_task_definition" "this" {
   family                   = "${var.name}-task"
   network_mode             = "bridge"
@@ -133,7 +133,7 @@ resource "aws_ecs_task_definition" "this" {
   tags = var.tags
 }
 
-// Keeps desired_count tasks running and registered with the ALB target group
+// Keeps desired_count tasks alive and registered with whichever target group we pass in
 resource "aws_ecs_service" "this" {
   name            = "${var.name}-svc"
   cluster         = aws_ecs_cluster.this.id

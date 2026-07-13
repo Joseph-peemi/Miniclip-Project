@@ -1,4 +1,4 @@
-// Root outputs — surfaces the values most needed after a terraform apply
+// The handful of values you actually want printed after `terraform apply`
 
 output "app_alb_dns_name" {
   description = "DNS name of the application ALB — point your app CNAME here"

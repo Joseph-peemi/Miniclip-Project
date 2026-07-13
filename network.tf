@@ -1,15 +1,15 @@
-// VPC peering: 10.40.0.0/16 (app) ↔ 10.41.0.0/16 (jenkins)
-// Jenkins must reach the app VPC to deploy containers (req. 2)
+// Peers the two VPCs so Jenkins (10.41.0.0/16) can actually reach the app
+// VPC (10.40.0.0/16) and push deployments to it.
 
 resource "aws_vpc_peering_connection" "app_jenkins" {
   vpc_id      = module.vpc_app.vpc_id
   peer_vpc_id = module.vpc_jenkins.vpc_id
-  auto_accept = true // same account + same region — no accepter resource needed
+  auto_accept = true // same account, same region, so no manual accepter step needed
 
   tags = merge(var.tags, { Name = "${local.name_prefix}-app-jenkins-peer" })
 }
 
-// Routes in the app private subnets pointing to Jenkins VPC
+// App side: send anything bound for the Jenkins CIDR across the peering link
 resource "aws_route" "app_to_jenkins" {
   count = length(module.vpc_app.private_route_table_ids)
 
@@ -18,7 +18,7 @@ resource "aws_route" "app_to_jenkins" {
   vpc_peering_connection_id = aws_vpc_peering_connection.app_jenkins.id
 }
 
-// Routes in the Jenkins private subnets pointing back to the app VPC
+// And the mirror route on the Jenkins side, back toward the app VPC
 resource "aws_route" "jenkins_to_app" {
   count = length(module.vpc_jenkins.private_route_table_ids)
 

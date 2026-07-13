@@ -8,11 +8,12 @@ terraform {
     }
   }
 
-  // Design note: no remote backend is configured. State is stored locally, which works
-  // for a single operator but risks corruption under concurrent applies (no locking, no
-  // versioning). The commented block below shows a correct S3 + DynamoDB setup reusing
-  // the bucket already provisioned in s3.tf. Left disabled to keep the initial apply
-  // self-contained — enable it once the bucket exists and team size grows beyond one.
+  // No remote backend yet — state is just local for now. That's fine while it's
+  // one person applying, but there's no locking or versioning, so two people
+  // running apply at the same time could corrupt it. The block below is a ready
+  // S3 + DynamoDB setup that reuses the logs bucket from s3.tf; it's commented
+  // out only because that bucket doesn't exist until the first apply runs.
+  // Flip it on once the bucket's there and more than one person touches this.
   #
   # backend "s3" {
   #   bucket         = "broken-pipeline-tfstate-eu-central-1"
