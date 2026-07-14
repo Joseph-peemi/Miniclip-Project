@@ -1,5 +1,5 @@
 // This runs on a Docker-based Jenkins controller.
-
+////
 // FLAW 2: every stage dumps its output to a .log file (build.log, push.log,
 // deploy.log) and then uploads that file to S3 on top of what Jenkins already
 // keeps in its own console log. That's three extra PutObject calls per build,
